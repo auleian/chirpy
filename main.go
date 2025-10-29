@@ -5,10 +5,17 @@ import (
 	"log"
 	"net/http"
 	"sync/atomic"
+	"os"
+	_ "github.com/lib/pq"
+	"database/sql"
+	"github.com/joho/godotenv"
+	"errors"
+	"CHIRPY/internal/database"
 )
 
 type apiConfig struct {
 	fileserverHits atomic.Int32
+	db             *database.Queries 
 }
 
 func (cfg *apiConfig) middlewareMetricsInc(next http.Handler) http.Handler {
@@ -39,7 +46,20 @@ func (cfg *apiConfig) resetHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func main(){
-	apiCfg := &apiConfig{}
+	godotenv.Load()
+	dbURL := os.Getenv("DB_URL")
+	
+	db, err := sql.Open("postgres", dbURL)
+	if err != nil {
+		errors.New("Database failed to open")
+	}
+
+	dbQueries := database.New(db)
+
+	apiCfg := &apiConfig{
+		db: dbQueries,  
+	}
+
 	mux := http.NewServeMux()
 
 	server := http.Server{
