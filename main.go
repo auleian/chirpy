@@ -83,6 +83,10 @@ func main(){
 		
 	})
 
+	mux.HandleFunc("POST /api/users", func(w http.ResponseWriter,req *http.Request){
+		user, err := cfg.db.CreateUser(r.Context(), params.Email)
+	})
+
 
 	log.Printf("Server started on port: 8080")
 	log.Fatal(server.ListenAndServe()) 
