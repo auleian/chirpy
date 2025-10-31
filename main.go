@@ -1,21 +1,24 @@
 package main
 
 import (
+	"CHIRPY/internal/database"
+	"database/sql"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
-	"sync/atomic"
 	"os"
-	_ "github.com/lib/pq"
-	"database/sql"
+	"sync/atomic"
+
 	"github.com/joho/godotenv"
-	"errors"
-	"CHIRPY/internal/database"
+	_ "github.com/lib/pq"
 )
 
 type apiConfig struct {
 	fileserverHits atomic.Int32
 	db             *database.Queries 
+	platform string
 }
 
 func (cfg *apiConfig) middlewareMetricsInc(next http.Handler) http.Handler {
@@ -40,6 +43,11 @@ func (cfg *apiConfig) metricsHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (cfg *apiConfig) resetHandler(w http.ResponseWriter, r *http.Request) {
+	if cfg.platform != "dev" {
+
+	}else{
+
+	}
 	cfg.fileserverHits.Store(0)
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
@@ -48,6 +56,7 @@ func (cfg *apiConfig) resetHandler(w http.ResponseWriter, r *http.Request) {
 func main(){
 	godotenv.Load()
 	dbURL := os.Getenv("DB_URL")
+	platform := os.Getenv("PLATFORM")
 	
 	db, err := sql.Open("postgres", dbURL)
 	if err != nil {
@@ -58,6 +67,7 @@ func main(){
 
 	apiCfg := &apiConfig{
 		db: dbQueries,  
+		platform: platform,
 	}
 
 	mux := http.NewServeMux()
@@ -81,10 +91,41 @@ func main(){
 
 	mux.HandleFunc("POST /api/validate_chirp", func(w http.ResponseWriter,req *http.Request){
 		
+		type requestBody struct {
+			Body string `json:"body"`
+		}
+
+		// Step 2: Decode JSON from request
+		var request requestBody
+		decoder := json.NewDecoder(req.Body)
+		err := decoder.Decode(&req)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			resp, _ := json.Marshal(map[string]string{"error": "Something went wrong"})
+			w.Header().Set("Content-Type", "application/json")
+			w.Write(resp)
+			return
+		}
+
+		// Step 3: Validate chirp length
+		if len(request.Body) > 140 {
+			w.WriteHeader(http.StatusBadRequest)
+			resp, _ := json.Marshal(map[string]string{"error": "Chirp is too long"})
+			w.Header().Set("Content-Type", "application/json")
+			w.Write(resp)
+			return
+		}
+
+		// Step 4: Respond success
+		w.WriteHeader(http.StatusOK)
+		resp, _ := json.Marshal(map[string]bool{"valid": true})
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(resp)
+		
 	})
 
 	mux.HandleFunc("POST /api/users", func(w http.ResponseWriter,req *http.Request){
-		user, err := cfg.db.CreateUser(r.Context(), params.Email)
+	
 	})
 
 
