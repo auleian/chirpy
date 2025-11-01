@@ -4,7 +4,6 @@ import (
 	"CHIRPY/internal/database"
 	"database/sql"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -44,13 +43,21 @@ func (cfg *apiConfig) metricsHandler(w http.ResponseWriter, r *http.Request) {
 
 func (cfg *apiConfig) resetHandler(w http.ResponseWriter, r *http.Request) {
 	if cfg.platform != "dev" {
-
-	}else{
-
+		w.WriteHeader(http.StatusForbidden)
+		return
 	}
+
+	err := cfg.db.DeleteAllUsers(r.Context())
+    if err != nil {
+        http.Error(w, "failed to delete users", http.StatusInternalServerError)
+        return
+    }
+
+	w.WriteHeader(http.StatusOK)
 	cfg.fileserverHits.Store(0)
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("ok"))
 }
 
 func main(){
@@ -60,7 +67,7 @@ func main(){
 	
 	db, err := sql.Open("postgres", dbURL)
 	if err != nil {
-		errors.New("Database failed to open")
+		log.Fatal(err)
 	}
 
 	dbQueries := database.New(db)
@@ -125,6 +132,7 @@ func main(){
 	})
 
 	mux.HandleFunc("POST /api/users", func(w http.ResponseWriter,req *http.Request){
+
 	
 	})
 
