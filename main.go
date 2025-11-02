@@ -9,7 +9,9 @@ import (
 	"net/http"
 	"os"
 	"sync/atomic"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 )
@@ -96,16 +98,15 @@ func main(){
 		w.Write([]byte("OK"))
 	})
 
-	mux.HandleFunc("POST /api/validate_chirp", func(w http.ResponseWriter,req *http.Request){
-		
+	mux.HandleFunc("POST /api/chirps", func(w http.ResponseWriter, req *http.Request) {
 		type requestBody struct {
-			Body string `json:"body"`
+			Body   string `json:"body"`
+			UserID string `json:"user_id"`
 		}
 
-		// Step 2: Decode JSON from request
 		var request requestBody
 		decoder := json.NewDecoder(req.Body)
-		err := decoder.Decode(&req)
+		err := decoder.Decode(&request)
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			resp, _ := json.Marshal(map[string]string{"error": "Something went wrong"})
@@ -114,7 +115,6 @@ func main(){
 			return
 		}
 
-		// Step 3: Validate chirp length
 		if len(request.Body) > 140 {
 			w.WriteHeader(http.StatusBadRequest)
 			resp, _ := json.Marshal(map[string]string{"error": "Chirp is too long"})
@@ -123,19 +123,112 @@ func main(){
 			return
 		}
 
-		// Step 4: Respond success
-		w.WriteHeader(http.StatusOK)
-		resp, _ := json.Marshal(map[string]bool{"valid": true})
+		if request.Body == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			resp, _ := json.Marshal(map[string]string{"error": "Chirp body cannot be empty"})
+			w.Header().Set("Content-Type", "application/json")
+			w.Write(resp)
+			return
+		}
+
+		// Parse the user_id UUID
+		userID, err := uuid.Parse(request.UserID)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			resp, _ := json.Marshal(map[string]string{"error": "Invalid user_id"})
+			w.Header().Set("Content-Type", "application/json")
+			w.Write(resp)
+			return
+		}
+
+		// Create chirp - only pass body and user_id since SQL generates the rest
+		chirp, err := apiCfg.db.CreateChirp(req.Context(), database.CreateChirpParams{
+			Body:   request.Body,
+			UserID: userID,
+		})
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			resp, _ := json.Marshal(map[string]string{"error": "Failed to create chirp"})
+			w.Header().Set("Content-Type", "application/json")
+			w.Write(resp)
+			return
+		}
+
+		type responseBody struct {
+			ID        string    `json:"id"`
+			CreatedAt time.Time `json:"created_at"`
+			UpdatedAt time.Time `json:"updated_at"`
+			Body      string    `json:"body"`
+			UserID    string    `json:"user_id"`
+		}
+
+		w.WriteHeader(http.StatusCreated)
+		resp, _ := json.Marshal(responseBody{
+			ID:        chirp.ID.String(),
+			CreatedAt: chirp.CreatedAt,
+			UpdatedAt: chirp.UpdatedAt,
+			Body:      chirp.Body,
+			UserID:    chirp.UserID.String(),
+		})
 		w.Header().Set("Content-Type", "application/json")
 		w.Write(resp)
-		
 	})
 
-	mux.HandleFunc("POST /api/users", func(w http.ResponseWriter,req *http.Request){
+	mux.HandleFunc("POST /api/users", func(w http.ResponseWriter, req *http.Request) {
+		type requestBody struct {
+			Email string `json:"email"`
+		}
 
-	
+		// Decode JSON from request
+		var request requestBody
+		decoder := json.NewDecoder(req.Body)
+		err := decoder.Decode(&request)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			resp, _ := json.Marshal(map[string]string{"error": "Invalid request body"})
+			w.Header().Set("Content-Type", "application/json")
+			w.Write(resp)
+			return
+		}
+
+		// Validate email is not empty
+		if request.Email == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			resp, _ := json.Marshal(map[string]string{"error": "Email cannot be empty"})
+			w.Header().Set("Content-Type", "application/json")
+			w.Write(resp)
+			return
+		}
+
+		// Create user in database - only pass email since SQL generates id and timestamps
+		user, err := apiCfg.db.CreateUser(req.Context(), request.Email)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			resp, _ := json.Marshal(map[string]string{"error": "Failed to create user"})
+			w.Header().Set("Content-Type", "application/json")
+			w.Write(resp)
+			return
+		}
+
+		// Response struct
+		type responseBody struct {
+			ID        string    `json:"id"`
+			CreatedAt time.Time `json:"created_at"`
+			UpdatedAt time.Time `json:"updated_at"`
+			Email     string    `json:"email"`
+		}
+
+		// Respond with created user
+		w.WriteHeader(http.StatusCreated) // 201
+		resp, _ := json.Marshal(responseBody{
+			ID:        user.ID.String(),
+			CreatedAt: user.CreatedAt,
+			UpdatedAt: user.UpdatedAt,
+			Email:     user.Email,
+		})
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(resp)
 	})
-
 
 	log.Printf("Server started on port: 8080")
 	log.Fatal(server.ListenAndServe()) 
