@@ -174,6 +174,10 @@ func main(){
 		w.Write(resp)
 	})
 
+	mux.HandleFunc("GET /api/chirps", func(w http.ResponseWriter, req *http.Request) {
+		
+	})
+
 	mux.HandleFunc("POST /api/users", func(w http.ResponseWriter, req *http.Request) {
 		type requestBody struct {
 			Email string `json:"email"`
