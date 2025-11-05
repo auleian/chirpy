@@ -77,7 +77,7 @@ func (cfg *apiConfig) loginhandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	params := parameters{}
-	err = json.Unmarshal(body, &params)
+	json.Unmarshal(body, &params)
 
 	// Look up user by email
 	user, err := cfg.db.GetUserByEmail(r.Context(), params.Email)
@@ -293,9 +293,7 @@ func main(){
 		w.Write(resp)
 	})
 
-	mux.HandleFunc("POST /api/login", func(w http.ResponseWriter, req *http.Request){
-
-	})
+	mux.HandleFunc("POST /api/login", apiCfg.loginhandler)
 
 	log.Printf("Server started on port: 8080")
 	log.Fatal(server.ListenAndServe()) 
