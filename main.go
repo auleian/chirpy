@@ -5,12 +5,14 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
 	"sync/atomic"
 	"time"
 
+	"CHIRPY/internal/auth"
 	"github.com/google/uuid"
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
@@ -60,6 +62,62 @@ func (cfg *apiConfig) resetHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("ok"))
+}
+
+func (cfg *apiConfig) loginhandler(w http.ResponseWriter, r *http.Request) {
+	type parameters struct {
+		Email    string `json:"email"`
+		Password string `json:"password"`
+	}
+
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "Invalid request payload", http.StatusBadRequest)
+		return
+	}
+
+	params := parameters{}
+	err = json.Unmarshal(body, &params)
+
+	// Look up user by email
+	user, err := cfg.db.GetUserByEmail(r.Context(), params.Email)
+	if err != nil {
+		// Return generic error message to prevent email enumeration
+		http.Error(w, "Incorrect email or password", http.StatusUnauthorized)
+		return
+	}
+
+	// Check if password matches
+	match, err := auth.CheckPasswordHash(params.Password, user.HashedPassword)
+	if err != nil || !match {
+		http.Error(w, "Incorrect email or password", http.StatusUnauthorized )
+		return
+	}
+
+	// Return user data without password
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(databaseUserToUser(user)))
+	
+}
+
+// databaseUserToUser converts a database.User to a JSON string excluding sensitive fields.
+func databaseUserToUser(u database.User) string {
+	type response struct {
+		ID        string    `json:"id"`
+		CreatedAt time.Time `json:"created_at"`
+		UpdatedAt time.Time `json:"updated_at"`
+		Email     string    `json:"email"`
+	}
+
+	resp := response{
+		ID:        u.ID.String(),
+		CreatedAt: u.CreatedAt,
+		UpdatedAt: u.UpdatedAt,
+		Email:     u.Email,
+	}
+
+	b, _ := json.Marshal(resp)
+	return string(b)
 }
 
 func main(){
@@ -175,11 +233,12 @@ func main(){
 	})
 
 	mux.HandleFunc("GET /api/chirps", func(w http.ResponseWriter, req *http.Request) {
-		
+
 	})
 
 	mux.HandleFunc("POST /api/users", func(w http.ResponseWriter, req *http.Request) {
 		type requestBody struct {
+			Password string `json:"password"`
 			Email string `json:"email"`
 		}
 
@@ -232,6 +291,10 @@ func main(){
 		})
 		w.Header().Set("Content-Type", "application/json")
 		w.Write(resp)
+	})
+
+	mux.HandleFunc("POST /api/login", func(w http.ResponseWriter, req *http.Request){
+
 	})
 
 	log.Printf("Server started on port: 8080")
