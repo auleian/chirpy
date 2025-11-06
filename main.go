@@ -22,6 +22,7 @@ type apiConfig struct {
 	fileserverHits atomic.Int32
 	db             *database.Queries 
 	platform string
+	secret string
 }
 
 func (cfg *apiConfig) middlewareMetricsInc(next http.Handler) http.Handler {
@@ -68,6 +69,7 @@ func (cfg *apiConfig) loginhandler(w http.ResponseWriter, r *http.Request) {
 	type parameters struct {
 		Email    string `json:"email"`
 		Password string `json:"password"`
+		Expire time.Time `json:"expires_in_seconds"`
 	}
 
 	body, err := io.ReadAll(r.Body)
@@ -125,6 +127,7 @@ func main(){
 	godotenv.Load()
 	dbURL := os.Getenv("DB_URL")
 	platform := os.Getenv("PLATFORM")
+	secret := os.Getenv("SECRET")
 	
 	db, err := sql.Open("postgres", dbURL)
 	if err != nil {
