@@ -69,7 +69,7 @@ func (cfg *apiConfig) loginhandler(w http.ResponseWriter, r *http.Request) {
 	type parameters struct {
 		Email    string `json:"email"`
 		Password string `json:"password"`
-		Expire time.Time `json:"expires_in_seconds"`
+		ExpiresInSeconds *int `json:"expires_in_seconds"`
 	}
 
 	body, err := io.ReadAll(r.Body)
@@ -95,6 +95,26 @@ func (cfg *apiConfig) loginhandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Incorrect email or password", http.StatusUnauthorized )
 		return
 	}
+
+	expirationTime := time.Hour
+
+	if params.ExpiresInSeconds != nil {
+		requestedDuration := time.Duration(*params.ExpiresInSeconds) * time.Second
+
+		if requestedDuration > time.Hour {
+			expirationTime = time.Hour
+		} else {
+			expirationTime = requestedDuration
+		}
+	}
+
+	token, err := auth.MakeJWT(user.ID, cfg.secret, expirationTime)
+	if err != nil {
+		http.Error(w, "Failed to create token", http.StatusInternalServerError)
+		return
+	}
+
+	
 
 	// Return user data without password
 	w.WriteHeader(http.StatusOK)
