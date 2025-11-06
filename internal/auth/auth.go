@@ -1,23 +1,68 @@
 package auth
 
 import (
-	"log"
+	"time"
+	"errors"
 	"github.com/alexedwards/argon2id"
+	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 )
 
 func HashPassword(password string) (string, error) {
 	hashed, err := argon2id.CreateHash(password, argon2id.DefaultParams)
 	if err != nil {
-		log.Fatal(err)
+		return "", err
 	}
-	return string(hashed), nil
+	return hashed, nil
 }
 
-func CheckPasswordHash(password, hash string) (bool, error){
-	match, err := argon2id.ComparePasswordAndHash("pa$$word", hash)
+func CheckPasswordHash(password, hash string) (bool, error) {
+	match, err := argon2id.ComparePasswordAndHash(password, hash)
 	if err != nil {
-		log.Fatal(err)
+		return false, err
 	}
 
 	return match, nil
+}
+
+func MakeJWT(userID uuid.UUID, tokenSecret string, expiresIn time.Duration) (string, error) {
+	claims := jwt.RegisteredClaims{
+		Issuer:    "chirpy",
+		IssuedAt:  jwt.NewNumericDate(time.Now()),
+		ExpiresAt: jwt.NewNumericDate(time.Now().Add(expiresIn)),
+		Subject:   userID.String(),
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+
+	signedToken, err := token.SignedString([]byte(tokenSecret))
+	if err != nil {
+		return "", err
+	}
+
+	return signedToken, nil
+}
+
+func ValidateJWT(tokenString, tokenSecret string) (uuid.UUID, error) {
+	claims := &jwt.RegisteredClaims{}
+
+	token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
+		return []byte(tokenSecret), nil
+	})
+
+	if err != nil {
+		return uuid.Nil, err
+	}
+
+	if !token.Valid {
+		return uuid.Nil, errors.New("invalid token")
+	}
+
+	userID, err := uuid.Parse(claims.Subject)
+	if err != nil {
+		return uuid.Nil, errors.New("invalid user ID in token")
+	}
+
+	return userID, nil
+
 }

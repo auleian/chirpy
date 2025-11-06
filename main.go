@@ -120,6 +120,7 @@ func databaseUserToUser(u database.User) string {
 	return string(b)
 }
 
+
 func main(){
 	godotenv.Load()
 	dbURL := os.Getenv("DB_URL")
